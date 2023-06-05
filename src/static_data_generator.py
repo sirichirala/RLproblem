@@ -8,6 +8,7 @@ import os
 import math
 import json
 
+import random
 import numpy as np
 import scipy.stats as stats
 
@@ -32,8 +33,8 @@ class Config(typing.NamedTuple):
         os.path.join(os.path.dirname(__file__), '..', 'data', 'raw'))
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
-    num_time_points: int = 312 
     instance_name: str = 'static_instance'
+    num_time_points: int = 5
     location_id: int = 3000
     lead_time_in_weeks: int = 12 
     container_volume: float = 2350.0
@@ -57,7 +58,12 @@ class StaticData(typing.NamedTuple):
     config: Config
     products: typing.List[Product]
     product_mle_params: typing.Dict[int, typing.Dict[str, float]]
-    
+    demand_data: typing.Dict[str, int]
+    ramping_factor: typing.Dict[int, int]
+    F: typing.Dict[str, int]
+    H: typing.Dict[str, int]
+    G: typing.Dict[str, int]
+
     @classmethod 
     def build(cls, cfg: Config): 
         """ 
@@ -86,28 +92,152 @@ class StaticData(typing.NamedTuple):
         
         # first filter based on product ids and ceil the demand forecast 
         df = df[df['item'].isin(product_ids)]
-        df['units'] = df['units'].apply(math.ceil)
+        df['units'] = df['units'].apply(math.ceil).abs()
 
-        mle_params = {}        
+        mle_params = {}
+        demand_data = {}        
         for id in product_ids:
             df_item = df[(df['item'] == id)]
             observations = np.array(df_item['units'])
             alpha, loc, scale = stats.gamma.fit(observations)
             mle_params[id] = {"alpha": alpha, "loc": loc, "scale": scale}
             # generating data is as simple as 
-            # data = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=100)   
+            # data = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=100)
+            demand = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=cfg.num_time_points)
+            demand = np.ceil(demand).astype(int)
+            for week in range(cfg.num_time_points):
+                key = f"{id}_{week}"  # Create a string representation of the key since key cant be tuple
+                demand_data[key] = int(demand[week])
         
+        """
+        1. Ramping factor for each product.
+        ramping_factor = {f"{id}" : random.randint(5, 15) for id in product_ids}
+        """
+        ramping_factor = {
+        "20052773001": 11,
+        "20052773002": 5,
+        "20052773003": 10,
+        "20052773004": 9,
+        "20052773005": 13,
+        "20052773006": 9,
+        "20052773007": 9,
+        "20052773008": 8,
+        "20064068002": 11,
+        "20064068003": 5,
+        "20064068004": 7,
+        "20064068005": 11,
+        "20064068008": 6,
+        "20064068009": 7,
+        "20064068010": 15,
+        "20064068011": 8,
+        "20064068013": 15,
+        "20064068014": 8,
+        "20064068015": 13,
+        "20064068016": 9,
+        "20064068017": 15
+        }
+
+        """
+        Cost Construction:
+            - F (penalty on failing to meet demand)
+                     F = {f"{id}" : random.uniform(30, 40) for id in product_ids}
+            - H (penalty on overstocking inventory)
+                     H = {f"{id}" : F[f"{id}"]/2 for id in product_ids}
+            - G (Reward for maintaining recommended safety stock)
+                     G = {f"{id}" : F[f"{id}"]/3 for id in product_ids}
+        """
+
+        F = {f"{id}" : random.uniform(30, 40) for id in product_ids}
+        H = {f"{id}" : F[f"{id}"]/2 for id in product_ids}
+        G = {f"{id}" : F[f"{id}"]/3 for id in product_ids}
+
+        F = {
+        "20052773001": 39.941893645681944,
+        "20052773002": 35.62418087896188,
+        "20052773003": 39.28131343323098,
+        "20052773004": 37.390625382372406,
+        "20052773005": 33.96974390290346,
+        "20052773006": 30.475698378672593,
+        "20052773007": 35.28321763738729,
+        "20052773008": 32.200197017293114,
+        "20064068002": 31.223413378866,
+        "20064068003": 32.156026169786095,
+        "20064068004": 39.27856441263787,
+        "20064068005": 39.05259758940265,
+        "20064068008": 32.05908829632462,
+        "20064068009": 31.731439664639105,
+        "20064068010": 31.505601858484727,
+        "20064068011": 36.1772862489711,
+        "20064068013": 36.933300082374224,
+        "20064068014": 39.01154198468994,
+        "20064068015": 33.45874336264806,
+        "20064068016": 39.831010014190056,
+        "20064068017": 36.36427265171041
+        }
+        H = {
+        "20052773001": 19.970946822840972,
+        "20052773002": 17.81209043948094,
+        "20052773003": 19.64065671661549,
+        "20052773004": 18.695312691186203,
+        "20052773005": 16.98487195145173,
+        "20052773006": 15.237849189336297,
+        "20052773007": 17.641608818693644,
+        "20052773008": 16.100098508646557,
+        "20064068002": 15.611706689433,
+        "20064068003": 16.078013084893048,
+        "20064068004": 19.639282206318935,
+        "20064068005": 19.526298794701326,
+        "20064068008": 16.02954414816231,
+        "20064068009": 15.865719832319552,
+        "20064068010": 15.752800929242364,
+        "20064068011": 18.08864312448555,
+        "20064068013": 18.466650041187112,
+        "20064068014": 19.50577099234497,
+        "20064068015": 16.72937168132403,
+        "20064068016": 19.915505007095028,
+        "20064068017": 18.182136325855204
+        }
+        G = {
+        "20052773001": 13.313964548560648,
+        "20052773002": 11.87472695965396,
+        "20052773003": 13.093771144410326,
+        "20052773004": 12.463541794124135,
+        "20052773005": 11.323247967634487,
+        "20052773006": 10.158566126224198,
+        "20052773007": 11.761072545795763,
+        "20052773008": 10.73339900576437,
+        "20064068002": 10.407804459622,
+        "20064068003": 10.718675389928698,
+        "20064068004": 13.092854804212623,
+        "20064068005": 13.017532529800883,
+        "20064068008": 10.686362765441539,
+        "20064068009": 10.577146554879702,
+        "20064068010": 10.501867286161575,
+        "20064068011": 12.0590954163237,
+        "20064068013": 12.311100027458075,
+        "20064068014": 13.00384732822998,
+        "20064068015": 11.152914454216019,
+        "20064068016": 13.277003338063352,
+        "20064068017": 12.121424217236802
+        }
+
+
+            
         return cls(
             config = cfg,
             products = products,
             product_mle_params = mle_params,
+            ramping_factor = ramping_factor,
+            demand_data=demand_data,
+            F = F,
+            H = H,
+            G = G
         )
     
     def write_to_file(self, fpath: str):
         cfg = self.config._asdict()
         del cfg['raw_data_path']
         del cfg['instance_path']
-        del cfg['num_time_points']
         del cfg['location_id']
         del cfg['items_file'] 
         del cfg['forecast_file'] 
@@ -115,7 +245,13 @@ class StaticData(typing.NamedTuple):
         data = {
             "config": cfg,
             "products": [p.to_json() for p in self.products],
-            "gamma_params": self.product_mle_params
+            "gamma_params": self.product_mle_params,
+            "ramping_factor": self.ramping_factor,
+            "demand_data": self.demand_data,
+            "fail_demand_cost": self.F,
+            "overstocking_cost": self.H,
+            "reward_recommended_stock": self.G
+
         }
         with open(fpath, "w") as outfile:
             json.dump(data, outfile, indent=4)

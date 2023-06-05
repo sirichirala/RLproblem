@@ -63,7 +63,7 @@ class IcData(typing.NamedTuple):
         
         # create products 
         products = [Product(id = i, on_hand_inventory = o) 
-                    for i, o in zip(df['item'], df['on_hand'])]
+                    for i, o in zip(df['item'], df['on_hand'].abs())]
         product_ids = set([p.id for p in products])
         
         

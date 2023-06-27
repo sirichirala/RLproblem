@@ -7,10 +7,17 @@ import csv
 import time
 
 from scm_env import *
-from spinup import ppo_tf1 as ppo
-import tensorflow as tf
+
+#import gymnasium for open ai gym compatible env
 import gym
 from gym import spaces
+import gymnasium
+
+#using stable_baselines3 for RL algorithms
+from stable_baselines3.common.env_checker import check_env
+from stable_baselines3 import A2C
+
+
 
 log = logging.getLogger(__name__)
 
@@ -101,19 +108,35 @@ class Data(typing.NamedTuple):
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)s--: %(message)s',
                         level=logging.INFO)
+    
     cfg = Config()
+    
     log.info('Starting data read from both json files for static data and initial conditions.')
     data = Data.build(cfg)
     log.info('Data read complete.')
+    
     log.info('Setting up reinforcement learning states, actions and environment.')
     environment = ScmEnv(data)
-    #environment.reset()
-    #action = np.zeros(21)
-    #environment.step(action)
     log.info('Environment setup complete.')
-    log.info('running reinforcement learning algorithm.')
-    # Register your custom environment
+    
+    log.info('check env compatibility with OpenAI gym')
+    compatible = isinstance(environment, gymnasium.Env)
+    if compatible:
+        print("The ScmEnv is OpenAI Gym compatible.")
+    else:
+        print("The ScmEnv is not OpenAI Gym compatible.")
+    
+    log.info('running reinforcement learning algorithms using stable baselines.')
+    #Register your custom environment
     #gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
+    
+    log.info('checking environment using stable baselines3')
+    check_env(environment)
+
+    model = A2C("MlpPolicy", environment).learn(10000)
+    print(model)
+    model.learn(total_timesteps=int(2e5), progress_bar=True)
+    
 
 if __name__ == '__main__':
     main()

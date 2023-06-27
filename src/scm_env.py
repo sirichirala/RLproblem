@@ -1,28 +1,10 @@
 import math
-import gym
 import numpy as np
 
-from gym import spaces
+import gymnasium
+from gymnasium import spaces    
 
-class ValidActionSpace(gym.Space):
-    def __init__(self, low, high, Vmax, P, container):
-        assert len(low) == len(high), "Dimension mismatch between low and high bounds."
-        assert (high >= low).all(), "Upper bound must be greater than or equal to the lower bound."
-        
-        self.low = low
-        self.high = high
-        self.Vmax = Vmax
-        self.P = P
-        self.container = container
-
-    def sample(self):
-        return np.random.randint(low=self.low, high=self.high + 1)
-
-    def contains(self, x):
-        return (x >= self.low).all() and (x <= self.high).all() and np.dot(x, self.V) >= 0.98 * self.Vmax and np.dot(x, self.V) <= self.Vmax
-
-
-class ScmEnv(gym.core.Env):
+class ScmEnv(gymnasium.Env):
 
     def __init__(self, data):
         """
@@ -39,7 +21,7 @@ class ScmEnv(gym.core.Env):
         self.L = data.L # int, lead time (weeks)
         self.S = data.S # Dictionary productid : safety stock weeks
         self.V = data.V #Dictionary productid : volume
-        self.Vmax = data.Vmax #float, volume max
+        self.Vmax = 20 #float, volume max
         self.F = data.F #Dictionary productid : cost
         self.H = data.H #Dictionary productid : cost
         self.G = data.G #Dictionary productid : cost
@@ -49,17 +31,17 @@ class ScmEnv(gym.core.Env):
 
         # Define the state/observation space 
         self.observation_space = self.create_observation_space()
-        print("observation sample")
-        print(self.observation_space.sample())
+        #print("observation sample")
+        #print(self.observation_space.sample())
 
         # Define the action space
         self.action_space = self.create_action_space()
-        print("action sample")
-        print(self.action_space.sample())
+        #print("action sample")
+        #print(self.action_space.sample())
 
         # Additional instance variables
         self.current_obs = None
-        self.week_num = None #Time step for the episode
+        self.week_num = 0 #Time step for the episode
 
 
     def create_observation_space(self):
@@ -68,15 +50,16 @@ class ScmEnv(gym.core.Env):
         return spaces.Box(low=LB, high=UB_obs, dtype=np.int32)
 
     def create_action_space(self):
-        action_space = {}
-        for container in range(self.C):
-            box_lb = np.array([0 for p in self.P], dtype=np.int32)
-            box_ub = np.array([np.floor(self.Vmax / self.V[p]) for p in self.P], dtype=np.int32)
-            valid_action_space = ValidActionSpace(low=box_lb, high=box_ub, Vmax=self.Vmax, P=self.P, container=container)
-            action_space[container] = valid_action_space
-        return spaces.Dict(action_space)
+        # Calculate the upper bound for each product and container
+        ub = np.zeros((self.C, len(self.P)), dtype=np.int32)
+        for c in range(self.C):
+            for i, p in enumerate(self.P):
+                ub[c][i] = np.floor(self.Vmax / self.V[p])
 
-    def reset(self):
+        action_space = spaces.Box(low=0, high=ub, shape=(self.C, len(self.P)), dtype=np.int32)
+        return action_space
+
+    def reset(self, seed=None):
         """
         Reset environment to initial state/first observation to start new episode.
         Must return observation of the initial state.
@@ -84,13 +67,13 @@ class ScmEnv(gym.core.Env):
         self.current_obs = np.array([self.init_inv[p] for p in self.P], dtype=np.int32)
         self.week_num = 0
 
-        return self.current_obs
+        return self.current_obs, {}
 
     def step(self, action):
         """
         Takes action as argument and performs one transition step.
-        Given current observation, returns next observation, reward obtained in transition, whether current obs is terminal state.
-        Optionally also: some additional info, check documentation.  
+        Given current observation, returns next observation, reward obtained in transition, whether current obs is terminal state, truncated state.
+        Also: some additional info, check documentation.  
         """
 
         #method parameters
@@ -108,8 +91,7 @@ class ScmEnv(gym.core.Env):
             # 3. Return next state (total products left after considering demand.)
         for index, element in np.ndenumerate(self.current_obs):
             p_id = self.P[index[0]]
-            for c in range(self.C):
-                added_demand_units[index] += action[index]
+            added_demand_units[index] = np.sum(action[:, index])
             if (element + added_demand_units[index]) >  self.D[f"{p_id}_{self.week_num}"]:
                 next_obs[index] = (element + added_demand_units[index]) - self.D[f"{p_id}_{self.week_num}"]
                 unmet_demand_units[index] = 0
@@ -133,17 +115,30 @@ class ScmEnv(gym.core.Env):
                     reward_G += self.G[f"{p_id}"]
         reward = penalty_F + penalty_H + reward_G
 
-        # Compute done
+        # Adding high penalty for taking an action that is infeasible.
+        #compute episode truncated conditions.
+        episode_truncated = False
+        for action_list in action:
+            sum_values = 0
+            for index, element in enumerate(self.V):
+                sum_values += action_list[index] * self.V[element]
+            if sum_values <= 0.98 * self.Vmax or sum_values >= self.Vmax:
+                episode_truncated = True
+                reward -= 100000
+                break
+
+        # Compute episode done conditions.
         self.week_num += 1
-        done = False
+        episode_done = False
         if self.week_num >= self.T:
-            done = True
+            episode_done = True
+            self.week_num = 0
         
-        #update current_obs
+        # update current_obs.
         self.current_obs = next_obs
 
-        # info must be dictionary
-        return self.current_obs, reward, done, {}
+        # info must be dictionary.
+        return self.current_obs, reward, episode_done, episode_truncated, {}
 
 
     

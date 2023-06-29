@@ -16,17 +16,17 @@ class ScmEnv(gymnasium.Env):
         4. Create additional instance variables.
         """
         self.P = data.P # List of product id's
-        self.T = len(data.T) # Episode length in days
+        self.T = data.T # Episode length in weeks
         self.D = data.D # Dictionary productid_weeknum : Demand
         self.L = data.L # int, lead time (weeks)
         self.S = data.S # Dictionary productid : safety stock weeks
         self.V = data.V #Dictionary productid : volume
-        self.Vmax = 20 #float, volume max
+        self.Vmax = data.Vmax #float, volume max
         self.F = data.F #Dictionary productid : cost
         self.H = data.H #Dictionary productid : cost
         self.G = data.G #Dictionary productid : cost
         self.init_inv = data.init_inv #Dictionary productid : initial inventory
-        self.C = 3 # int, max containers
+        self.C = data.C # int, max containers
         self.R = data.R #Dictionary productid : ramping units
 
         # Define the state/observation space 
@@ -54,7 +54,7 @@ class ScmEnv(gymnasium.Env):
         ub = np.zeros((self.C, len(self.P)), dtype=np.int32)
         for c in range(self.C):
             for i, p in enumerate(self.P):
-                ub[c][i] = np.floor(self.Vmax / self.V[p])
+                ub[c][i] = np.floor(self.Vmax / self.V[p]) # Upper bound calculated as shipping only one product type 'p' in the entire container 'c'.
 
         action_space = spaces.Box(low=0, high=ub, shape=(self.C, len(self.P)), dtype=np.int32)
         return action_space
@@ -116,21 +116,18 @@ class ScmEnv(gymnasium.Env):
         reward = penalty_F + penalty_H + reward_G
 
         # Adding high penalty for taking an action that is infeasible.
-        #compute episode truncated conditions.
-        episode_truncated = False
         for action_list in action:
             sum_values = 0
             for index, element in enumerate(self.V):
                 sum_values += action_list[index] * self.V[element]
             if sum_values <= 0.98 * self.Vmax or sum_values >= self.Vmax:
-                episode_truncated = True
                 reward -= 100000
-                break
 
-        # Compute episode done conditions.
+        # Compute episode done and truncated conditions.
         self.week_num += 1
         episode_done = False
-        if self.week_num >= self.T:
+        episode_truncated = False
+        if self.week_num >= len(self.T):
             episode_done = True
             self.week_num = 0
         

@@ -7,15 +7,10 @@ import csv
 import time
 
 from scm_env import *
-
-#import gymnasium for open ai gym compatible env
-import gym
-from gym import spaces
-import gymnasium
+from rl_algo import *
 
 #using stable_baselines3 for RL algorithms
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3 import A2C
+#from stable_baselines3 import A2C
 
 
 
@@ -127,15 +122,14 @@ def main():
         print("The ScmEnv is not OpenAI Gym compatible.")
     
     log.info('running reinforcement learning algorithms using stable baselines.')
+    algorithms = RLAlgorithms(environment, cfg)
     #Register your custom environment
     #gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
     
     log.info('checking environment using stable baselines3')
-    check_env(environment)
-
-    model = A2C("MlpPolicy", environment).learn(10000)
-    print(model)
-    model.learn(total_timesteps=int(2e5), progress_bar=True)
+    algorithms.checkenv()
+    algorithms.A2C_algorithm()
+    #algorithms.PPO_algorithm()
     
 
 if __name__ == '__main__':

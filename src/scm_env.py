@@ -56,7 +56,8 @@ class ScmEnv(gymnasium.Env):
             for i, p in enumerate(self.P):
                 ub[c][i] = np.floor(self.Vmax / self.V[p]) # Upper bound calculated as shipping only one product type 'p' in the entire container 'c'.
 
-        action_space = spaces.Box(low=0, high=ub, shape=(self.C, len(self.P)), dtype=np.int32)
+        action_space = spaces.Box(low=0, high=ub, shape=(self.C, len(self.P)), dtype=np.float32)
+        #can set bounds tighter to milp if needed
         return action_space
 
     def reset(self, seed=None):
@@ -75,6 +76,7 @@ class ScmEnv(gymnasium.Env):
         Given current observation, returns next observation, reward obtained in transition, whether current obs is terminal state, truncated state.
         Also: some additional info, check documentation.  
         """
+        action = np.floor(action)
 
         #method parameters
         next_obs = np.zeros(len(self.P), dtype=np.int32)
@@ -84,6 +86,7 @@ class ScmEnv(gymnasium.Env):
         penalty_H = 0
         reward_G = 0
         reward = 0
+        milp_reward = 0
 
         # Compute next observation
             # 1. Take the current observation and action argument.
@@ -115,12 +118,25 @@ class ScmEnv(gymnasium.Env):
                     reward_G += self.G[f"{p_id}"]
         reward = penalty_F + penalty_H + reward_G
 
-        # Adding high penalty for taking an action that is infeasible.
+        # Compute milp equivalent reward
+        milp_reward = reward
+
+        """
+        Adding high penalty for taking an action that is infeasible.
+        1. Violating Vmax - shipping constraints
+        2. Violating ramping constraints
+        """
+        # shipping:
         for action_list in action:
             sum_values = 0
             for index, element in enumerate(self.V):
                 sum_values += action_list[index] * self.V[element]
             if sum_values <= 0.98 * self.Vmax or sum_values >= self.Vmax:
+                reward -= 100000
+                
+        # Ramping:
+        for curr, nxt, r in zip(self.current_obs, next_obs, self.R.values()):
+            if abs(curr - nxt) >= r:
                 reward -= 100000
 
         # Compute episode done and truncated conditions.
@@ -135,7 +151,7 @@ class ScmEnv(gymnasium.Env):
         self.current_obs = next_obs
 
         # info must be dictionary.
-        return self.current_obs, reward, episode_done, episode_truncated, {}
+        return self.current_obs, reward, episode_done, episode_truncated, {'milp_reward':milp_reward}
 
 
     

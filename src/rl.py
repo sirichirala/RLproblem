@@ -75,7 +75,7 @@ class Data(typing.NamedTuple):
         1. Create rest of the model parameters.
             - C, A, B
         """
-        num_containers = 50
+        num_containers = 1
         large_constant_1 = 10000
         large_constant_2 = 10000
 
@@ -122,10 +122,10 @@ def main():
         print("The ScmEnv is not OpenAI Gym compatible.")
     
     log.info('running reinforcement learning algorithms using stable baselines.')
-    algorithms = RLAlgorithms(environment, cfg)
     #Register your custom environment
     #gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
-    
+    algorithms = RLAlgorithms(environment, cfg)
+
     log.info('checking environment using stable baselines3')
     algorithms.checkenv()
     algorithms.A2C_algorithm()

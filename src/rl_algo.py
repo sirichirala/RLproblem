@@ -3,6 +3,7 @@ import os
 import csv
 import numpy as np
 
+from scm_env import ScmEnv
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3 import A2C, PPO, SAC
 
@@ -11,7 +12,7 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(10*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
         #self.optimal_actions = [] # Place holder optimal actions.
         self.result_path = cfg.result_path # Results path.
@@ -22,7 +23,6 @@ class RLAlgorithms():
         return check_env(self.environment)
 
     def checkfeasibility(self):
-
         pass
 
     def A2C_algorithm(self):
@@ -34,17 +34,20 @@ class RLAlgorithms():
         obs, info = self.environment.reset()
         episode_done = False
         optimal_actions = []
+        milp_reward = 0
 
         while not episode_done:
             # Predict the action using the trained model
             action, _states = model.predict(obs)
+            action = np.floor(action)
             optimal_actions.append(np.sum(action, axis=0).tolist())
 
             # Take the action in the environment
             obs, reward, episode_done, episode_truncated, info = self.environment.step(action)
+            milp_reward += info['milp_reward']
 
         # Write optimal action results to file.
-        self.write_to_csv(reward, optimal_actions)
+        self.write_to_csv(reward, milp_reward, optimal_actions)
 
         return optimal_actions
 
@@ -73,14 +76,14 @@ class RLAlgorithms():
         return optimal_actions
 
 
-    def write_to_csv(self, reward, optimal_actions):
+    def write_to_csv(self, reward, milp_reward, optimal_actions):
         """
         1. create a results.csv file in the results_milp folder which has the total reward collected.
         2. creata a separate result_instance_# file for each instance with the actions.
         """
         
         result_file = os.path.join(self.result_path, 'results.csv')
-        result_data = [reward]
+        result_data = [reward, milp_reward]
         
         file_exists = os.path.isfile(result_file)
 
@@ -89,7 +92,7 @@ class RLAlgorithms():
             writer = csv.writer(file)
             # Write header if the file doesn't exist
             if not file_exists:
-                writer.writerow(["Instance name", "Reward"])
+                writer.writerow(["Instance name", "Reward", "MILP Reward"])
         file.close()
         with open(result_file, "r") as file:
             no_lines = sum(1 for _ in file)

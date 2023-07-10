@@ -12,7 +12,7 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(10*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
         #self.optimal_actions = [] # Place holder optimal actions.
         self.result_path = cfg.result_path # Results path.
@@ -30,6 +30,13 @@ class RLAlgorithms():
         model = A2C("MlpPolicy", self.environment)
         model.learn(total_timesteps=self.N, progress_bar=True)
 
+        # Save the trained model
+        #model.save("trained_model_A2C")
+
+        # Load the saved model
+        #model = A2C.load("trained_model_A2C")
+
+
         # Test the model for one episode
         obs, info = self.environment.reset()
         episode_done = False
@@ -40,7 +47,7 @@ class RLAlgorithms():
             # Predict the action using the trained model
             action, _states = model.predict(obs)
             action = np.floor(action)
-            optimal_actions.append(np.sum(action, axis=0).tolist())
+            optimal_actions.append(action.tolist())
 
             # Take the action in the environment
             obs, reward, episode_done, episode_truncated, info = self.environment.step(action)
@@ -65,7 +72,7 @@ class RLAlgorithms():
         while not episode_done:
             # Predict the action using the trained model
             action, _states = model.predict(obs)
-            optimal_actions.append(np.sum(action, axis=0).tolist())
+            optimal_actions.append(action.tolist())
 
             # Take the action in the environment
             obs, reward, episode_done, episode_truncated, info = self.environment.step(action)

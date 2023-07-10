@@ -38,6 +38,7 @@ class Data(typing.NamedTuple):
     C: int
     A: int
     B: int
+    gamma_params: typing.Dict[str, typing.Dict[str, float]]
 
     @classmethod 
     def build(cls, cfg: Config):
@@ -60,6 +61,7 @@ class Data(typing.NamedTuple):
         F = static_instance_data.get('fail_demand_cost', {})
         H = static_instance_data.get('overstocking_cost', {})
         G = static_instance_data.get('reward_recommended_stock', {})
+        gamma_params = static_instance_data.get('gamma_params',{})
 
         """
         1. Read the ic_instance.json file.
@@ -94,7 +96,8 @@ class Data(typing.NamedTuple):
             init_inv = initial_inventory,
             C = num_containers,
             A = large_constant_1,
-            B = large_constant_2
+            B = large_constant_2,
+            gamma_params = gamma_params
             )
 
 
@@ -114,6 +117,7 @@ def main():
     environment = ScmEnv(data)
     log.info('Environment setup complete.')
     
+    
     log.info('check env compatibility with OpenAI gym')
     compatible = isinstance(environment, gymnasium.Env)
     if compatible:
@@ -121,13 +125,16 @@ def main():
     else:
         print("The ScmEnv is not OpenAI Gym compatible.")
     
+    
     log.info('running reinforcement learning algorithms using stable baselines.')
-    #Register your custom environment
-    #gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
+    # --------Register your custom environment
+    # --------gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
     algorithms = RLAlgorithms(environment, cfg)
 
     log.info('checking environment using stable baselines3')
     algorithms.checkenv()
+
+    
     algorithms.A2C_algorithm()
     #algorithms.PPO_algorithm()
     

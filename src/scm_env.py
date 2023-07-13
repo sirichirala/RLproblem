@@ -11,30 +11,38 @@ class ScmEnv(gymnasium.Env):
         """
         1. Import all necessary parameters.
         2. Define self.observation_space:
-            - observation: The number of products of type 'p' present in the warehouse after considering demand +
-                           The Demand of products of type 'p' for next 'data.L' weeks.
+            - observation (Box): The number of products of type 'p' present in the warehouse after considering demand (np.array(len(self.P)))+
+                           The Demand of products of type 'p' for next 'data.L' weeks (np.array(self.L*len(self.P)))+
+                           If shipping container limits have been violated for action in previous step (int(0 or 1)) +
+                           Number of ramping violations for products for action in previous step (int(0, len(self.P)))
         3. Define self.action_space:
-            - action: The number of products of type 'p' ordered to the warehouse.
+            - action (Box): The number of products of type 'p' ordered to the warehouse (np.array(len(self.P))).
         4. Create additional instance variables.
         """
         self.P = data.P # List of product id's
-        self.T = data.T # Episode length in weeks
-        self.L = 5 # int, Number of weeks of future demands to add to observation space
-        self.S = data.S # Dictionary productid : safety stock weeks
+        self.C = data.C # int, max containers
         self.V = data.V # Dictionary productid : volume
         self.Vmax = data.Vmax # float, volume max
+        self.S = data.S # Dictionary productid : safety stock weeks
+        self.R = data.R # Dictionary productid : ramping units
         self.F = data.F # Dictionary productid : cost
         self.H = data.H # Dictionary productid : cost
         self.G = data.G # Dictionary productid : cost
+        
+        self.L = 3 # int, Number of weeks of future demands to add to observation space
+        self.T = data.T # Episode length in weeks
+        
         self.init_inv = data.init_inv # Dictionary productid : initial inventory
-        self.C = data.C # int, max containers
-        self.R = data.R # Dictionary productid : ramping units
         self.gamma_params = data.gamma_params # Dictionary{productid : Dictionary{alpha, loc, scale}}
-
+        self.Dmax_p200640680 = 50 
+        self.Dmax_p200527730  = 15
         self.D = self.create_demands_episode() # Dictionary productid_weeknum : Demand
+        self.D_pred = data.D # Demands for prediciton.
 
         # Define the state/observation space 
         self.observation_space = self.create_observation_space()
+        #print(self.observation_space.high)
+        #print(self.observation_space.low)
 
         # Define the action space
         self.action_space = self.create_action_space()
@@ -42,17 +50,20 @@ class ScmEnv(gymnasium.Env):
         #print(self.action_space.sample())
         #print(self.action_space.high)
         #print(self.action_space.low)
+        
 
         # Additional instance variables
         self.current_obs = None
+        self.previous_action = None
         self.week_num = 0 #Time step for the episode
-
+        
 
     def create_demands_episode(self):
         demand_data = {}        
         for p in self.P:
             demand = stats.gamma.rvs(self.gamma_params[f"{p}"]['alpha'], self.gamma_params[f"{p}"]['loc'], self.gamma_params[f"{p}"]['scale'], size= len(self.T) + self.L)
             demand = np.ceil(demand).astype(int)
+            demand += np.random.randint(0, 6, size=len(demand))
             for week in range(len(self.T) + self.L):
                 key = f"{p}_{week}"  # String representation of the key since key cant be tuple
                 demand_data[key] = int(abs(demand[week]))
@@ -60,22 +71,50 @@ class ScmEnv(gymnasium.Env):
     
     def create_observation_space(self):
         # Calculate the upper bounds for products and demands.
-        UB_num_products = np.array([np.floor(self.Vmax/self.V[p])*self.C*len(self.T) + self.init_inv[p] for p in self.P], dtype=np.int32) # Upper bound for each product for observation
-        UB_Demand = np.array([100 for p in self.P], dtype=np.int32)
-        UB = np.hstack((UB_num_products, np.tile(UB_Demand, self.L)))
+        UB_num_products = np.array([len(self.T)*self.Dmax_p200640680*(1 + 2*value) if i < len(self.S) - 8 else len(self.T)*self.Dmax_p200527730*(1 + 2*value) for i, value in enumerate(self.S.values())], dtype=np.int32) # Upper bound for each product for observation
+        UB_Demand = np.full(len(self.P), self.Dmax_p200640680, dtype=np.int32)
+        UB_Demand[-8:] = self.Dmax_p200527730
+        UB_shipping = np.array([1], dtype=np.int32)
+        UB_ramping = np.array([len(self.P)], dtype=np.int32)
+        #UB_ramping_abs = np.array([self.Dmax_p200640680*(1 + 2*value) if i < len(self.S) - 8 else self.Dmax_p200527730*(1 + 2*value) for i, value in enumerate(self.S.values())], dtype=np.int32)
+        UB = np.hstack((UB_num_products, np.tile(UB_Demand, self.L), UB_shipping, UB_ramping))
         return spaces.Box(low=0, high=UB, dtype=np.int32)
 
     def create_action_space(self):
         # Calculate the upper bound for number of orders for each product
-        UB = np.zeros(len(self.P), dtype=np.int32)
-        for i, p in enumerate(self.P):
-            UB[i] = np.floor(self.Vmax / self.V[p])*self.C # Upper bound calculated as shipping only one product type in all containers.
-
+        UB = np.array([self.Dmax_p200640680*(1 + 2*value) if i < len(self.S) - 8 else self.Dmax_p200527730*(1 + 2*value) for i, value in enumerate(self.S.values())], dtype=np.int32)
         action_space = spaces.Box(low=0, high=UB, dtype=np.float32)
-        #can set bounds tighter to milp if needed
         return action_space
 
-    
+    def prediction_reset(self, seed=None):
+        """
+        Reset environment to initial state/first observation to start new episode.
+        """
+        self.week_num = 0
+
+        current_products = np.array([self.init_inv[p] for p in self.P], dtype=np.int32)
+
+        self.D = self.D_pred
+        for p in self.P:
+            demand = stats.gamma.rvs(self.gamma_params[f"{p}"]['alpha'], self.gamma_params[f"{p}"]['loc'], self.gamma_params[f"{p}"]['scale'], size= self.L)
+            demand = np.ceil(demand).astype(int)
+            demand += np.random.randint(0, 6, size=len(demand))
+            for week in range(self.L):
+                key = f"{p}_{week+len(self.T)}"  # String representation of the key since key cant be tuple
+                self.D[key] = int(abs(demand[week]))
+
+        demand_products = []
+        for week in range(1, self.L+1):
+            for p in self.P:
+                demand_products.append(self.D[f"{p}_{week}"])
+        demand_products = np.array(demand_products, dtype=np.int32)
+
+        shipping = np.array([0])
+        ramping = np.array([0])
+        #ramping_abs = np.array([0]*len(self.P))
+        
+        self.current_obs = np.hstack((current_products,demand_products, shipping, ramping)) # Observation is number of products left after considering demand followed by the demands for products for next data.L weeks.
+        return self.current_obs, {}
 
     def reset(self, seed=None):
         """
@@ -92,7 +131,11 @@ class ScmEnv(gymnasium.Env):
                 demand_products.append(self.D[f"{p}_{week}"])
         demand_products = np.array(demand_products, dtype=np.int32)
 
-        self.current_obs = np.hstack((current_products,demand_products)) # Observation is number of products left after considering demand followed by the demands for products for next data.L weeks. 
+        shipping = np.array([0])
+        ramping = np.array([0])
+        #ramping_abs = np.array([0]*len(self.P))
+
+        self.current_obs = np.hstack((current_products,demand_products, shipping, ramping)) # Observation is number of products left after considering demand followed by the demands for products for next data.L weeks.
         return self.current_obs, {}
 
     def step(self, action):
@@ -102,9 +145,10 @@ class ScmEnv(gymnasium.Env):
         Also: some additional info, check documentation.  
         """
         action = np.floor(action)
-
+    
         #method parameters
-        next_obs = np.zeros(len(self.P)*(1+self.L), dtype=np.int32)
+        #next_obs = np.zeros(len(self.P)*(1+self.L) + 2 + len(self.P), dtype=np.int32)
+        next_obs = np.zeros(len(self.P)*(1+self.L) + 2, dtype=np.int32)
 
         added_demand_units = np.zeros(len(self.P), dtype=np.int32)
         unmet_demand_units = np.zeros(len(self.P), dtype=np.int32)
@@ -113,6 +157,9 @@ class ScmEnv(gymnasium.Env):
         reward_G = 0
         reward = 0
         milp_reward = 0
+        shipping = 0
+        ramping = 0
+        #ramping_abs = np.zeros(len(self.P), dtype=np.int32)
 
         # Compute next observation
             # 1. Take the current observation and action argument.
@@ -158,14 +205,39 @@ class ScmEnv(gymnasium.Env):
         sum_values = 0
         for index, element in enumerate(self.V.values()):
             sum_values += action[index] * element
-        if sum_values <= 0.98 * self.Vmax or sum_values >= self.Vmax:
+        if sum_values >= self.Vmax * self.C:
             reward -= 100000
+            shipping = 1
+        else:
+            reward += 100000
+            #print(shipping)
                 
         # Ramping:
-        for curr, nxt, r in zip(self.current_obs[:len(self.P)], next_obs[:len(self.P)], self.R.values()):
-            if abs(curr - nxt) >= r:
-                reward -= 10000
-        
+        if self.week_num != 0:
+            for index, (curr, nxt, r) in enumerate(zip(action, self.previous_action, self.R.values())):
+                #ramping_abs[index]=(abs(curr-nxt))
+                if abs(curr - nxt) >= r:
+                    reward -= 100000
+                    ramping +=1
+            if ramping == 0:
+                reward += 2500000
+    
+        # update current_obs.
+        index=0
+        for week in range(self.week_num+1, self.week_num+self.L+1):
+            for p in self.P:
+                next_obs[len(self.P)+index] = self.D[f"{p}_{week}"]
+                index +=1 
+
+        next_obs[-2] = shipping 
+        next_obs[-1] = ramping
+        #next_obs[-len(self.P)-2] = shipping 
+        #next_obs[-len(self.P)-1] = ramping
+        #next_obs[-len(self.P):] = ramping_abs
+        self.current_obs = next_obs
+
+        #update previous action
+        self.previous_action = action
 
         # Compute episode done and truncated conditions.
         self.week_num += 1
@@ -175,16 +247,8 @@ class ScmEnv(gymnasium.Env):
             episode_done = True
             self.week_num = 0
     
-        # update current_obs.
-        index=0
-        for week in range(self.week_num, self.week_num+self.L):
-            for p in self.P:
-                next_obs[len(self.P)+index] = self.D[f"{p}_{week}"]
-                index +=1 
-        self.current_obs = next_obs
-
         # info must be dictionary.
-        return self.current_obs, reward, episode_done, episode_truncated, {'milp_reward':milp_reward}
+        return self.current_obs, reward, episode_done, episode_truncated, {'milp_reward':milp_reward, 'shipping_violated':shipping, 'ramping_violated':ramping}
 
     
     def render(self, mode="human"):
@@ -211,4 +275,5 @@ class ScmEnv(gymnasium.Env):
         """
         return
 
+    
     

@@ -9,10 +9,6 @@ import time
 from scm_env import *
 from rl_algo import *
 
-#using stable_baselines3 for RL algorithms
-#from stable_baselines3 import A2C
-
-
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +73,7 @@ class Data(typing.NamedTuple):
         1. Create rest of the model parameters.
             - C, A, B
         """
-        num_containers = 1
+        num_containers = 50
         large_constant_1 = 10000
         large_constant_2 = 10000
 
@@ -134,9 +130,7 @@ def main():
     log.info('checking environment using stable baselines3')
     algorithms.checkenv()
 
-    
-    algorithms.A2C_algorithm()
-    #algorithms.PPO_algorithm()
+    algorithms.algorithm()
     
 
 if __name__ == '__main__':

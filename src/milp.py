@@ -128,7 +128,7 @@ class OptimizationModel:
         Define Decision Variables
         """
         self.x = {(p, t): self.model.integer_var(lb=0, name=f'x_{p}_{t}') for p in self.P for t in self.T}
-        self.n = {t: self.model.integer_var(lb=0, name=f'n_{t}') for t in self.T}
+        #self.n = {t: self.model.integer_var(lb=0, name=f'n_{t}') for t in self.T}
 
         self.i = {(p, t): self.model.integer_var(lb=0, name=f'i_{p}_{t}') for p in self.P for t in self.T}
         self.u = {(p, t): self.model.integer_var(lb=0, name=f'u_{p}_{t}') for p in self.P for t in self.T}
@@ -206,6 +206,11 @@ class OptimizationModel:
         
         for t in self.T:
             self.model.add_constraint(
+                self.model.sum(self.V[p] * self.x[(p, t)] for p in self.P) <= self.Vmax * self.C,
+                ctname=f"shipping_constraint1_{t}"
+            )
+            """
+            self.model.add_constraint(
                 self.n[t] <= self.C,
                 ctname=f"shipping_constraint_{t}"
             )
@@ -217,7 +222,7 @@ class OptimizationModel:
                 0.98 * self.Vmax * self.n[t] <= self.model.sum(self.V[p] * self.x[(p, t)] for p in self.P),
                 ctname=f"shipping_constraint2_{t}"
             )
-        
+            """
 
         #Ramping constraint
         for p in self.P:
@@ -307,9 +312,9 @@ class OptimizationModel:
         result_instance_file = os.path.join(self.result_path, 'result_instance_' + str(no_lines) + '.csv')
         with open(result_instance_file, "a", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Time period", "n_t"] + self.P)
+            writer.writerow(["Time period"] + self.P)
             for t in self.T:
-                row_values = [t, self.model.solution.get_value(self.n[t])]
+                row_values = [t]
                 for p in self.P:
                      row_values.append(self.model.solution.get_value(self.x[p,t]))
                 writer.writerow(row_values)

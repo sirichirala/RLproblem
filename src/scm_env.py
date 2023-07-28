@@ -20,7 +20,7 @@ class ScmEnv(gymnasium.Env):
         4. Create additional instance variables.
         """
         self.P = data.P # List of product id's
-        self.C = data.C # int, max containers
+        self.N = data.N # int, max containers
         self.V = data.V # Dictionary productid : volume
         self.Vmax = data.Vmax # float, volume max
         self.S = data.S # Dictionary productid : safety stock weeks
@@ -41,8 +41,6 @@ class ScmEnv(gymnasium.Env):
 
         # Define the state/observation space 
         self.observation_space = self.create_observation_space()
-        #print(self.observation_space.high)
-        #print(self.observation_space.low)
 
         # Define the action space
         self.action_space = self.create_action_space()
@@ -205,7 +203,7 @@ class ScmEnv(gymnasium.Env):
         sum_values = 0
         for index, element in enumerate(self.V.values()):
             sum_values += action[index] * element
-        if sum_values >= self.Vmax * self.C:
+        if sum_values >= self.Vmax * self.N:
             reward -= 100000
             shipping = 1
         else:

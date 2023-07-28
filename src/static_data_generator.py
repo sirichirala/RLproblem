@@ -34,7 +34,7 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
     instance_name: str = 'static_instance'
-    num_time_points: int = 5
+    num_time_points: int = 50
     location_id: int = 3000
     lead_time_in_weeks: int = 12 
     container_volume: float = 2350.0
@@ -63,6 +63,7 @@ class StaticData(typing.NamedTuple):
     F: typing.Dict[str, int]
     H: typing.Dict[str, int]
     G: typing.Dict[str, int]
+    alpha: int
 
     @classmethod 
     def build(cls, cfg: Config): 
@@ -145,6 +146,8 @@ class StaticData(typing.NamedTuple):
                      H = {f"{id}" : F[f"{id}"]/2 for id in product_ids}
             - G (Reward for maintaining recommended safety stock)
                      G = {f"{id}" : F[f"{id}"]/3 for id in product_ids}
+            - alpha (Penalty for violating proportionality)
+                     alpha = 25
         """
 
         F = {f"{id}" : random.uniform(30, 40) for id in product_ids}
@@ -220,7 +223,7 @@ class StaticData(typing.NamedTuple):
         "20064068016": 13.277003338063352,
         "20064068017": 12.121424217236802
         }
-
+        alpha = 25
 
             
         return cls(
@@ -231,7 +234,8 @@ class StaticData(typing.NamedTuple):
             demand_data=demand_data,
             F = F,
             H = H,
-            G = G
+            G = G,
+            alpha = 25
         )
     
     def write_to_file(self, fpath: str):
@@ -250,7 +254,8 @@ class StaticData(typing.NamedTuple):
             "demand_data": self.demand_data,
             "fail_demand_cost": self.F,
             "overstocking_cost": self.H,
-            "reward_recommended_stock": self.G
+            "reward_recommended_stock": self.G,
+            "proportionality_cost": self.alpha
 
         }
         with open(fpath, "w") as outfile:

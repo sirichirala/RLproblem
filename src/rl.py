@@ -16,6 +16,7 @@ class Config(typing.NamedTuple):
     static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'static_instance.json')
     initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'ic_instance.json')
     result_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results_rl'))
+    model_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'model_rl'))
 
 class Data(typing.NamedTuple):
     config: Config
@@ -31,7 +32,7 @@ class Data(typing.NamedTuple):
     H: typing.Dict[str, float]
     G: typing.Dict[str, float]
     init_inv: typing.Dict[int, int]
-    C: int
+    N: int
     A: int
     B: int
     gamma_params: typing.Dict[str, typing.Dict[str, float]]
@@ -50,7 +51,7 @@ class Data(typing.NamedTuple):
         week_number = [week for week in range(static_instance_data.get('config', {})['num_time_points'])]
         demand = static_instance_data.get('demand_data',{})
         lead_time = static_instance_data['config']['lead_time_in_weeks']
-        safety_stock_product = {product['id']: math.ceil(product['safety_stock_in_weeks']) for product in static_instance_data.get('products', [])}
+        safety_stock_product = {product['id']: math.floor(product['safety_stock_in_weeks']) for product in static_instance_data.get('products', [])}
         volume_product = {product['id']: product['volume'] for product in static_instance_data.get('products', [])}
         volume_max = static_instance_data['config']['container_volume']
         ramping_units = static_instance_data.get('ramping_factor', {})
@@ -71,7 +72,7 @@ class Data(typing.NamedTuple):
 
         """
         1. Create rest of the model parameters.
-            - C, A, B
+            - N, A, B
         """
         num_containers = 50
         large_constant_1 = 10000
@@ -90,7 +91,7 @@ class Data(typing.NamedTuple):
             H = H,
             G = G,
             init_inv = initial_inventory,
-            C = num_containers,
+            N = num_containers,
             A = large_constant_1,
             B = large_constant_2,
             gamma_params = gamma_params
@@ -130,7 +131,11 @@ def main():
     log.info('checking environment using stable baselines3')
     algorithms.checkenv()
 
-    algorithms.algorithm()
+    #Use this to train the agent using reinforcement learning. Comment out otherwise.
+    #algorithms.algorithm_train()
+
+    #Use this to make prediction using the save reinforcement learning model. Comment out otherwise.
+    algorithms.algorithm_predict()
     
 
 if __name__ == '__main__':

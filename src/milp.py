@@ -14,7 +14,6 @@ log = logging.getLogger(__name__)
 class Config(typing.NamedTuple):
     static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'static_instance.json')
     initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'ic_instance.json')
-    #result_path: str = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results_milp')), 'results.csv')
     result_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results_milp'))
 
 class Data(typing.NamedTuple):
@@ -30,17 +29,19 @@ class Data(typing.NamedTuple):
     F: typing.Dict[str, float]
     H: typing.Dict[str, float]
     G: typing.Dict[str, float]
+    alpha: int
     init_inv: typing.Dict[int, int]
-    C: int
+    N: int
     A: int
     B: int
+    C: typing.List[typing.Set[str]]
 
     @classmethod 
     def build(cls, cfg: Config):
         """
         1. Read the static_instance.json file.
         2. Collect all the static data:
-            - P, T, D, L, S, V, Vmax, R, F, H, G
+            - P, T, D, L, S, V, Vmax, R, F, H, G, alpha
         """
         with open(cfg.static_instance_path, 'r') as file:
             static_instance_data = json.load(file)
@@ -49,13 +50,14 @@ class Data(typing.NamedTuple):
         week_number = [week for week in range(static_instance_data.get('config', {})['num_time_points'])]
         demand = static_instance_data.get('demand_data',{})
         lead_time = static_instance_data['config']['lead_time_in_weeks']
-        safety_stock_product = {product['id']: math.ceil(product['safety_stock_in_weeks']) for product in static_instance_data.get('products', [])}
+        safety_stock_product = {product['id']: math.floor(product['safety_stock_in_weeks']) for product in static_instance_data.get('products', [])}
         volume_product = {product['id']: product['volume'] for product in static_instance_data.get('products', [])}
         volume_max = static_instance_data['config']['container_volume']
         ramping_units = static_instance_data.get('ramping_factor', {})
         F = static_instance_data.get('fail_demand_cost', {})
         H = static_instance_data.get('overstocking_cost', {})
         G = static_instance_data.get('reward_recommended_stock', {})
+        alpha = static_instance_data.get('proportionality_cost')
 
         """
         1. Read the ic_instance.json file.
@@ -69,11 +71,20 @@ class Data(typing.NamedTuple):
 
         """
         1. Create rest of the model parameters.
-            - C, A, B
+            - N, A, B, C
         """
-        num_containers = 10
+        num_containers = 50
         large_constant_1 = 10000
         large_constant_2 = 10000
+
+
+    
+        # Get the set of distinct safety stock values
+        distinct_safety_stock_values = set(safety_stock_product.values())
+        # Create the collection of sets C
+        C = [set(product_id for product_id, safety_stock_value in safety_stock_product.items() if safety_stock_value == s)
+            for s in distinct_safety_stock_values]
+        
 
         return cls(config = cfg,
             P = product_ids,
@@ -87,10 +98,12 @@ class Data(typing.NamedTuple):
             F = F,
             H = H,
             G = G,
+            alpha = alpha,
             init_inv = initial_inventory,
-            C = num_containers,
+            N = num_containers,
             A = large_constant_1,
-            B = large_constant_2
+            B = large_constant_2,
+            C = C
             )
 
 class OptimizationModel:
@@ -105,16 +118,19 @@ class OptimizationModel:
         self.F = data.F
         self.H = data.H
         self.G = data.G
+        self.alpha = data.alpha
         self.init_inv = data.init_inv
-        self.C = data.C
+        self.N = data.N
         self.A = data.A
         self.B = data.B
         self.R = data.R
+        self.C = data.C
 
         self.model = None
         self.solve_time = None
 
         self.result_path = cfg.result_path
+        print(self.C)
 
     def build_model(self):
         
@@ -140,6 +156,7 @@ class OptimizationModel:
         self.q = {(p, t): self.model.integer_var(lb=0, name=f'q_{p}_{t}') for p in self.P for t in self.T}
         self.k = {(p, t): self.model.binary_var(name=f'k_{p}_{t}') for p in self.P for t in self.T}
         self.m = {(p, t): self.model.binary_var(name=f'm_{p}_{t}') for p in self.P for t in self.T}
+        self.sigma = {(p, idx, t): self.model.integer_var(lb=0, name=f'sigma_{p}_{idx}_{t}') for idx, c in enumerate(self.C) for p in c for t in self.T}
 
         """
         Add constraints
@@ -147,6 +164,7 @@ class OptimizationModel:
             - Demand and inventory constraints
             - Shipping constraint
             - Ramping constraint
+            - Proportionality constraints
             - Variable restrictions
         """
         #initial inventory constraints
@@ -206,7 +224,7 @@ class OptimizationModel:
         
         for t in self.T:
             self.model.add_constraint(
-                self.model.sum(self.V[p] * self.x[(p, t)] for p in self.P) <= self.Vmax * self.C,
+                self.model.sum(self.V[p] * self.x[(p, t)] for p in self.P) <= self.Vmax * self.N,
                 ctname=f"shipping_constraint1_{t}"
             )
             """
@@ -237,6 +255,34 @@ class OptimizationModel:
                         ctname=f"ramping_constraint2_{p}_{t}"
                     )
 
+        #Proportionality constraints
+        for idx, c in enumerate(self.C):
+            for p in c:
+                for t in self.T:
+                    if p == next(iter(c)):
+                        self.model.add_constraint(
+                            self.sigma[(p, idx, t)] == 0,
+                            ctname=f"proportionality_constraint1_{p}_{idx}_{t}"
+                            #setting proportionality violation for the first product type in each category to zero since the comparision is w.r.t. first product type in group, for all weeks.
+                        )
+                    elif t == 0 and p != next(iter(c)):
+                        self.model.add_constraint(
+                            self.sigma[(p, idx, t)] == 0,
+                            ctname=f"proportionality_constraint2_{p}_{idx}_{t}"
+                            #setting proportionality violation for all product types for first week in each category to zero since initial inventory is predecided.
+                        )
+                    else:
+                        self.model.add_constraint(
+                            self.sigma[(p, idx, t)] >= self.i[(next(iter(c)), t)] - self.i[(p, t)],
+                            ctname=f"proportionality_constraint3_{p}_{idx}_{t}"
+                        )
+                        self.model.add_constraint(
+                            self.sigma[(p, idx, t)] >= self.i[(p, t)] - self.i[(next(iter(c)), t)],
+                            ctname=f"proportionality_constraint4_{p}_{idx}_{t}"
+                        )
+
+
+
         #Variable restrictions
 
         for p in self.P:
@@ -262,7 +308,8 @@ class OptimizationModel:
         # Define the objective function expression
         objective_expr = self.model.sum(self.F[f"{p}"] * self.u[p, t] for p in self.P for t in self.T) + \
                             self.model.sum(self.H[f"{p}"] * self.o[p, t] for p in self.P for t in self.T) - \
-                             self.model.sum(self.G[f"{p}"] * self.m[p, t] for p in self.P for t in self.T)
+                             self.model.sum(self.G[f"{p}"] * self.m[p, t] for p in self.P for t in self.T) + \
+                              self.model.sum(self.alpha*self.sigma[p, idx, t] for idx, c in enumerate(self.C) for p in c for t in self.T)
 
         # Set the objective function
         self.model.minimize(objective_expr)
@@ -283,6 +330,11 @@ class OptimizationModel:
             logging.info(f"Notify end solve, status=JobSolveStatus.OPTIMAL_SOLUTION, solve_time={self.solve_time}")
         else:
             log.warning('Optimization did not result in an optimal solution.')
+        
+        for idx, c in enumerate(self.C):
+            for p in c:
+                for t in self.T:
+                    print(self.sigma[p, idx, t], self.model.solution.get_value(self.sigma[p, idx, t]))
         
     
     def write_to_csv(self):

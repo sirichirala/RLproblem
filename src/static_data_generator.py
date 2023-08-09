@@ -34,7 +34,7 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
     instance_name: str = 'static_instance'
-    num_time_points: int = 50
+    num_time_points: int = 5
     location_id: int = 3000
     lead_time_in_weeks: int = 12 
     container_volume: float = 2350.0

@@ -140,7 +140,9 @@ class RLAlgorithms():
         1. create a results.csv file in the results_milp folder which has the total reward collected.
         2. creata a separate result_instance_# file for each instance with the actions.
         """
-        
+        if not os.path.exists(self.result_path):
+            os.makedirs(self.result_path)
+
         result_file = os.path.join(self.result_path, 'results.csv')
         result_data = [reward, milp_reward]
         

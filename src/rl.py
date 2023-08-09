@@ -132,10 +132,10 @@ def main():
     algorithms.checkenv()
 
     #Use this to train the agent using reinforcement learning. Comment out otherwise.
-    #algorithms.algorithm_train()
+    algorithms.algorithm_train()
 
     #Use this to make prediction using the save reinforcement learning model. Comment out otherwise.
-    algorithms.algorithm_predict()
+    #algorithms.algorithm_predict()
     
 
 if __name__ == '__main__':

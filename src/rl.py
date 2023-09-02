@@ -16,7 +16,9 @@ class Config(typing.NamedTuple):
     static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'static_instance.json')
     initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'ic_instance.json')
     result_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results_rl'))
+    os.makedirs(result_path, exist_ok=True)
     model_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'model_rl'))
+    os.makedirs(model_path, exist_ok=True)
 
 class Data(typing.NamedTuple):
     config: Config
@@ -132,10 +134,10 @@ def main():
     algorithms.checkenv()
 
     #Use this to train the agent using reinforcement learning. Comment out otherwise.
-    algorithms.algorithm_train()
+    #algorithms.algorithm_train()
 
     #Use this to make prediction using the save reinforcement learning model. Comment out otherwise.
-    #algorithms.algorithm_predict()
+    algorithms.algorithm_predict()
     
 
 if __name__ == '__main__':

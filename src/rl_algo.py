@@ -62,7 +62,7 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(1000*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
         self.algo_name = A2C
         self.model_path = cfg.model_path #RL model path.
@@ -100,7 +100,7 @@ class RLAlgorithms():
 
     def algorithm_predict(self):
         # Load the saved model
-        self.model = self.algo_name.load(os.path.join(self.model_path, "best_model"))
+        self.model = self.algo_name.load(os.path.join(self.model_path, "best_model.zip"))
 
         # Test the model for one episode
         obs, info = self.environment.prediction_reset()

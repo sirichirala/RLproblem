@@ -130,7 +130,7 @@ class OptimizationModel:
         self.solve_time = None
 
         self.result_path = cfg.result_path
-        print(self.C)
+        #print(self.C)
 
     def build_model(self):
         
@@ -256,6 +256,7 @@ class OptimizationModel:
                     )
 
         #Proportionality constraints
+        """
         for idx, c in enumerate(self.C):
             for p in c:
                 for t in self.T:
@@ -280,7 +281,7 @@ class OptimizationModel:
                             self.sigma[(p, idx, t)] >= self.i[(p, t)] - self.i[(next(iter(c)), t)],
                             ctname=f"proportionality_constraint4_{p}_{idx}_{t}"
                         )
-
+        """
 
 
         #Variable restrictions
@@ -330,18 +331,21 @@ class OptimizationModel:
             logging.info(f"Notify end solve, status=JobSolveStatus.OPTIMAL_SOLUTION, solve_time={self.solve_time}")
         else:
             log.warning('Optimization did not result in an optimal solution.')
-        
+        """
         for idx, c in enumerate(self.C):
             for p in c:
                 for t in self.T:
                     print(self.sigma[p, idx, t], self.model.solution.get_value(self.sigma[p, idx, t]))
-        
+        """
     
     def write_to_csv(self):
         """
         1. create a results.csv file in the results_milp folder which has the optimality status, objective function values, solve times for instances run.
         2. creata a separate result_instance_# file for each instance with the decision variables.
         """
+        if not os.path.exists(self.result_path):
+            os.makedirs(self.result_path)
+        
         result_file = os.path.join(self.result_path, 'results.csv')
         result_data = [self.model.solve_status, self.model.solution.objective_value, self.solve_time]
         

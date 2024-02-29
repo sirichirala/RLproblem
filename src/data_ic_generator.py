@@ -4,7 +4,7 @@ import json
 import pandas as pd 
 import typing 
 import os
-import math
+import random
 import numpy as np
 
 
@@ -28,7 +28,7 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
     instance_name: str = 'ic_instance'
-    items_file: str = 'item_master.csv'
+    items_file: str = 'item_master_50.csv'
     forecast_file: str = 'forecast.csv'
     open_positions_file: str = 'open_po.csv'
 
@@ -60,10 +60,16 @@ class IcData(typing.NamedTuple):
         
         # remove items with zero safety stock and zero on-hand stock
         df.drop(df[(df.on_hand == 0) & (df.safety_stock == 0)].index, inplace = True)
+
         
+        #keep only 5 products (toy problem!!!!!!!)
+        #df = df.tail(5)
+        
+
         # create products 
-        products = [Product(id = i, on_hand_inventory = o) 
-                    for i, o in zip(df['item'], df['on_hand'].abs())]
+        #products = [Product(id = i, on_hand_inventory = o) 
+        #            for i, o in zip(df['item'], df['on_hand'].abs())]
+        products = [Product(id=item, on_hand_inventory=random.randint(0, 5)) for item in df['item']]
         product_ids = set([p.id for p in products])
         
         

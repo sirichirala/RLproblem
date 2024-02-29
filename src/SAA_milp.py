@@ -12,8 +12,8 @@ from docplex.mp.solution import *
 log = logging.getLogger(__name__)
 
 class Config(typing.NamedTuple):
-    static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'static_instance.json')
-    initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'ic_instance.json')
+    static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'SAA', 'static_instance.json')
+    initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'SAA', 'ic_instance.json')
     result_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'milp_results'))
 
 class Data(typing.NamedTuple):
@@ -374,7 +374,7 @@ class OptimizationModel:
         if not os.path.exists(self.result_path):
             os.makedirs(self.result_path)
         
-        result_file = os.path.join(self.result_path, 'milp_results.csv')
+        result_file = os.path.join(self.result_path, 'SAA_results.csv')
         result_data = [self.model.solve_status, self.model.solution.objective_value, self.solve_time]
         
         file_exists = os.path.isfile(result_file)
@@ -393,7 +393,7 @@ class OptimizationModel:
             writer.writerow([no_lines] + result_data)
 
         #need self.x[(p, t)], self.n[t]
-        result_instance_file = os.path.join(self.result_path, 'result_instance_action_' + str(no_lines) + '.csv')
+        result_instance_file = os.path.join(self.result_path, 'SAA_result_instance_action.csv')
         with open(result_instance_file, "a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(["Time period"] + self.P)

@@ -13,8 +13,8 @@ from rl_algo import *
 log = logging.getLogger(__name__)
 
 class Config(typing.NamedTuple):
-    static_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'static_instance.json')
-    initial_condition_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'data', 'ic_instance.json')
+    num_instances = 200
+    saa_instance_path: str = os.path.join(os.path.dirname(__file__), '..', 'SAA')
     result_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'rl_results'))
     os.makedirs(result_path, exist_ok=True)
     model_path: str = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'rl_model'))
@@ -40,13 +40,13 @@ class Data(typing.NamedTuple):
     gamma_params: typing.Dict[str, typing.Dict[str, float]]
 
     @classmethod 
-    def build(cls, cfg: Config):
+    def build(cls, cfg: Config, initial_condition_instance_path, static_instance_path):
         """
         1. Read the static_instance.json file.
         2. Collect all the static data:
             - P, T, D, L, S, V, Vmax, R, F, H, G
         """
-        with open(cfg.static_instance_path, 'r') as file:
+        with open(static_instance_path, 'r') as file:
             static_instance_data = json.load(file)
 
         product_ids = [product['id'] for product in static_instance_data.get('products', [])]
@@ -67,7 +67,7 @@ class Data(typing.NamedTuple):
         2. Collect all initial condition info.
              - i_p,0
         """
-        with open(cfg.initial_condition_instance_path, 'r') as file:
+        with open(initial_condition_instance_path, 'r') as file:
             ic_data = json.load(file)
 
         initial_inventory = {product['id']: product['on_hand_inventory'] for product in ic_data.get('products', [])}
@@ -107,24 +107,22 @@ def main():
                         level=logging.INFO)
     
     cfg = Config()
-    
     log.info('Starting data read from both json files for static data and initial conditions.')
-    data = Data.build(cfg)
-    log.info('Data read complete.')
+    for i in range(cfg.num_instances):
+        ic_filename = os.path.join(cfg.saa_instance_path, f"ic_instance_{i}.json")
+        static_filename = os.path.join(cfg.saa_instance_path, f"static_instance_{i}.json")
+        data = Data.build(cfg, ic_filename, static_filename)
+        log.info('Data read complete.')
     
-    log.info('Setting up reinforcement learning states, actions and environment.')
-    environment = ScmEnv(data)
-    log.info('Environment setup complete.')
-    
-    
-    log.info('check env compatibility with OpenAI gym')
-    compatible = isinstance(environment, gymnasium.Env)
-    if compatible:
-        print("The ScmEnv is OpenAI Gym compatible.")
-    else:
-        print("The ScmEnv is not OpenAI Gym compatible.")
+        log.info('Setting up reinforcement learning states, actions and environment.')
+        environment = ScmEnv(data)
+        log.info('Environment setup complete.')
+        algorithms = RLAlgorithms(environment, cfg)
+        #Use this to make prediction using the save reinforcement learning model. Comment out otherwise.
+        algorithms.algorithm_predict()
     
     
+    """
     log.info('running reinforcement learning algorithms using stable baselines.')
     # --------Register your custom environment
     # --------gym.register(id='ScmEnv-v0', entry_point=ScmEnv(data))
@@ -134,10 +132,9 @@ def main():
     algorithms.checkenv()
 
     #Use this to train the agent using reinforcement learning. Comment out otherwise.
-    algorithms.algorithm_train()
-
-    #Use this to make prediction using the save reinforcement learning model. Comment out otherwise.
-    #algorithms.algorithm_predict()
+    #algorithms.algorithm_train()
+    """
+    
     
 
 if __name__ == '__main__':

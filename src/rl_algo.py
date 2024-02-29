@@ -3,9 +3,11 @@ import os
 import csv
 import numpy as np
 
+from rl_zoo3 import linear_schedule
+
 from scm_env import ScmEnv
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3 import A2C, PPO
+from stable_baselines3 import A2C, PPO, SAC
 
 import matplotlib.pyplot as plt
 from stable_baselines3.common import results_plotter
@@ -41,12 +43,11 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
           # Retrieve training reward
           x, y = ts2xy(load_results(self.log_dir), "timesteps")
           if len(x) > 0:
-              # Mean training reward over the last 100 episodes
-              mean_reward = np.mean(y[-100:])
+              # Mean training reward over the last 1000 episodes
+              mean_reward = np.mean(y[-10000:])
               if self.verbose >= 1:
                 print(f"Num timesteps: {self.num_timesteps}")
                 print(f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}")
-
               # New best model, you could save the agent here
               if mean_reward > self.best_mean_reward:
                   self.best_mean_reward = mean_reward
@@ -62,9 +63,9 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(4000000*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
-        self.algo_name = A2C
+        self.algo_name = PPO
         self.model_path = cfg.model_path #RL model path.
         self.model = None
         self.result_path = cfg.result_path # Results path.
@@ -76,8 +77,8 @@ class RLAlgorithms():
 
     def algorithm_train(self):
         self.environment = Monitor(self.environment, self.model_path)
-        self.model = self.algo_name("MlpPolicy", self.environment, verbose=0)
-        callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=self.model_path)
+        self.model = self.algo_name("MlpPolicy", self.environment, verbose=0, tensorboard_log=self.model_path)
+        callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=self.model_path)
         self.model.learn(total_timesteps=self.N, progress_bar=True, callback=callback)
 
         plot_results([self.model_path], self.N, results_plotter.X_TIMESTEPS, "ScmEnv")
@@ -86,34 +87,21 @@ class RLAlgorithms():
 
         return
     
-    """
-    def algorithm_train(self):
-        #Train the model
-        self.model = self.algo_name("MlpPolicy", self.environment)
-        self.model.learn(total_timesteps=self.N, progress_bar=True)
-
-        # Save the trained model
-        self.model.save(str(self.model_path)+f"\\trained_model_{str(self.algo_name).split('.')[-1][:-2]}")
-
-        return
-    """
 
     def algorithm_predict(self):
         # Load the saved model
         self.model = self.algo_name.load(os.path.join(self.model_path, "best_model.zip"))
-
         # Test the model for one episode
         obs, info = self.environment.prediction_reset()
         episode_done = False
         optimal_actions = []
         shipping_violated = []
-        ramping_violated = []
         milp_episode_reward = 0
         rl_episode_reward = 0
 
         while not episode_done:
             # Predict the action using the trained model
-            action, _states = self.model.predict(obs)
+            action, _states = self.model.predict(obs, deterministic=True)
             action = np.floor(action)
             optimal_actions.append(action.tolist())
 
@@ -122,20 +110,22 @@ class RLAlgorithms():
             rl_episode_reward += reward
             milp_episode_reward += info['milp_reward']
             shipping_violated.append(info['shipping_violated'])
-            ramping_violated.append(info['ramping_violated'])
             if shipping_violated[-1] == 0:
-                rl_episode_reward -= 100000
-            if len(ramping_violated) > 1 and ramping_violated[-1] == 0:
-                rl_episode_reward -= 2500000
-
-
+                rl_episode_reward -= 0
+            
+            inv = 0 
+            for p in range(0,5):
+                inv += info['inventory'][p]
+            print("inv: " + str(inv))
+            print(sum(info['unmet']))
+            
         # Write optimal action results to file.
-        self.write_to_csv(rl_episode_reward, milp_episode_reward, optimal_actions, shipping_violated, ramping_violated)
+        self.write_to_csv(rl_episode_reward, milp_episode_reward, optimal_actions, shipping_violated) #,ramping_violated)
 
         return optimal_actions
 
 
-    def write_to_csv(self, reward, milp_reward, optimal_actions, shipping_violated, ramping_violated):
+    def write_to_csv(self, reward, milp_reward, optimal_actions, shipping_violated): #, ramping_violated):
         """
         1. create a results.csv file in the results_milp folder which has the total reward collected.
         2. creata a separate result_instance_# file for each instance with the actions.
@@ -143,8 +133,8 @@ class RLAlgorithms():
         if not os.path.exists(self.result_path):
             os.makedirs(self.result_path)
 
-        result_file = os.path.join(self.result_path, 'results.csv')
-        result_data = [reward, milp_reward]
+        result_file = os.path.join(self.result_path, 'rl_results.csv')
+        result_data = [reward, milp_reward] 
         
         file_exists = os.path.isfile(result_file)
 
@@ -164,14 +154,14 @@ class RLAlgorithms():
         
 
         # Writing actions
-        result_instance_file = os.path.join(self.result_path, 'result_instance_' + str(no_lines) + '.csv')
+        result_instance_file = os.path.join(self.result_path, 'result_instance_action_' + str(no_lines) + '.csv')
         with open(result_instance_file, "a", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Time period"] + self.P + ["shipping"] + ["ramping"])
+            writer.writerow(["Time period"] + self.P + ["shipping"]) #+ ["ramping"])
             for t in self.T:
                 row_values = [t]
                 for p in range(len(self.P)):
                     row_values.append(optimal_actions[t][p])
                 row_values.append(shipping_violated[t])
-                row_values.append(ramping_violated[t])
+                #row_values.append(ramping_violated[t])
                 writer.writerow(row_values)

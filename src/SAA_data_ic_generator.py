@@ -28,7 +28,7 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'SAA'))
     instance_name: str = 'ic_instance'
-    items_file: str = 'item_master_50.csv'
+    items_file: str = 'item_master_200.csv'
     forecast_file: str = 'forecast.csv'
     open_positions_file: str = 'open_po.csv'
 

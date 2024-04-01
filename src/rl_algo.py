@@ -63,7 +63,7 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(16000000*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
         self.algo_name = PPO
         self.model_path = cfg.model_path #RL model path.

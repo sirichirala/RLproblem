@@ -6,3 +6,6 @@ gymnasium
 stable-baselines3
 tqdm
 rich
+scikit-learn
+rl_zoo3
+tensorboard

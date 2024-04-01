@@ -38,7 +38,7 @@ class ScmEnv(gymnasium.Env):
         self.inv_max = 5
         self.gamma_params = data.gamma_params # Dictionary{productid : Dictionary{alpha, loc, scale}}
         self.Dmax_p200640680 = 35 
-        self.Dmax_p200527730  = 35 #12
+        self.Dmax_p200527730  = 15
         self.D = 0 # Dictionary productid_weeknum : Demand
         self.D_pred = data.D # Demands for prediciton.
 

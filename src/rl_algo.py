@@ -63,7 +63,7 @@ class RLAlgorithms():
     def __init__(self, environment, cfg):
         self.P = environment.P #Number of products.
         self.T = environment.T # Number of time steps per episode.
-        self.N = int(100000*len(self.T)) # Number of episodes used for training rl algorithms.
+        self.N = int(4000000*len(self.T)) # Number of episodes used for training rl algorithms.
         self.environment = environment # SCM Environment.
         self.algo_name = PPO
         self.model_path = cfg.model_path #RL model path.
@@ -77,7 +77,7 @@ class RLAlgorithms():
 
     def algorithm_train(self):
         self.environment = Monitor(self.environment, self.model_path)
-        self.model = self.algo_name("MlpPolicy", self.environment, verbose=0, tensorboard_log=self.model_path)
+        self.model = self.algo_name("MlpPolicy", self.environment, ent_coef=0.01, verbose=0, tensorboard_log=self.model_path) #policy_kwargs=dict(net_arch=[256, 256]), learning_rate=0.03,
         callback = SaveOnBestTrainingRewardCallback(check_freq=10000, log_dir=self.model_path)
         self.model.learn(total_timesteps=self.N, progress_bar=True, callback=callback)
 
@@ -96,6 +96,7 @@ class RLAlgorithms():
         episode_done = False
         optimal_actions = []
         shipping_violated = []
+        ramping_violated = []
         milp_episode_reward = 0
         rl_episode_reward = 0
 
@@ -110,22 +111,23 @@ class RLAlgorithms():
             rl_episode_reward += reward
             milp_episode_reward += info['milp_reward']
             shipping_violated.append(info['shipping_violated'])
-            if shipping_violated[-1] == 0:
-                rl_episode_reward -= 0
+            ramping_violated.append(info['ramping_violated'])
+            #if shipping_violated[-1] == 0:
+            #    rl_episode_reward -= 0
             
-            inv = 0 
-            for p in range(0,5):
-                inv += info['inventory'][p]
-            print("inv: " + str(inv))
-            print(sum(info['unmet']))
+            #inv = 0 
+            #for p in range(0,5):
+            #    inv += info['inventory'][p]
+            #print("inv: " + str(inv))
+            #print(sum(info['unmet']))
             
         # Write optimal action results to file.
-        self.write_to_csv(rl_episode_reward, milp_episode_reward, optimal_actions, shipping_violated) #,ramping_violated)
+        self.write_to_csv(rl_episode_reward, milp_episode_reward, optimal_actions, shipping_violated, ramping_violated) #,ramping_violated)
 
         return optimal_actions
 
 
-    def write_to_csv(self, reward, milp_reward, optimal_actions, shipping_violated): #, ramping_violated):
+    def write_to_csv(self, reward, milp_reward, optimal_actions, shipping_violated, ramping_violated):
         """
         1. create a results.csv file in the results_milp folder which has the total reward collected.
         2. creata a separate result_instance_# file for each instance with the actions.
@@ -157,11 +159,11 @@ class RLAlgorithms():
         result_instance_file = os.path.join(self.result_path, 'result_instance_action_' + str(no_lines) + '.csv')
         with open(result_instance_file, "a", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Time period"] + self.P + ["shipping"]) #+ ["ramping"])
+            writer.writerow(["Time period"] + self.P + ["shipping"] + ["ramping"])
             for t in self.T:
                 row_values = [t]
                 for p in range(len(self.P)):
                     row_values.append(optimal_actions[t][p])
                 row_values.append(shipping_violated[t])
-                #row_values.append(ramping_violated[t])
+                row_values.append(ramping_violated[t])
                 writer.writerow(row_values)

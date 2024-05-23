@@ -27,6 +27,7 @@ class ScmEnv(gymnasium.Env):
         self.N = data.N # int, max containers
         self.V = data.V # Dictionary productid : volume
         self.Vmax = data.Vmax # float, volume max
+        self.R = data.R # Dictionary productid : ramping units
         self.S = data.S # Dictionary productid : safety stock weeks
         self.F = data.F # Dictionary productid : cost
         self.H = data.H # Dictionary productid : cost
@@ -37,7 +38,7 @@ class ScmEnv(gymnasium.Env):
         self.init_inv = data.init_inv # Dictionary productid : initial inventory
         self.inv_max = 5
         self.gamma_params = data.gamma_params # Dictionary{productid : Dictionary{alpha, loc, scale}}
-        self.Dmax_p200640680 = 35 
+        self.Dmax_p200640680 = 15 
         self.Dmax_p200527730  = 15
         self.D = 0 # Dictionary productid_weeknum : Demand
         self.D_pred = data.D # Demands for prediciton.
@@ -75,9 +76,10 @@ class ScmEnv(gymnasium.Env):
     def create_demands_episode(self):
         demand_data = {}        
         for p in self.P:
-            demand = stats.gamma.rvs(self.gamma_params[f"{p}"]['alpha'], self.gamma_params[f"{p}"]['loc'], self.gamma_params[f"{p}"]['scale'], size= len(self.T) + self.L)
-            demand = np.ceil(demand).astype(int)
-            demand += np.random.randint(0, 3, size=len(demand))
+            demand = [random.randint(5,15) for _ in range(len(self.T) + self.L)]
+            #demand = stats.gamma.rvs(self.gamma_params[f"{p}"]['alpha'], self.gamma_params[f"{p}"]['loc'], self.gamma_params[f"{p}"]['scale'], size= len(self.T) + self.L)
+            #demand = np.ceil(demand).astype(int)
+            #demand += np.random.randint(0, 3, size=len(demand))
             for week in range(len(self.T)):
                 key = f"{p}_{week}"  # String representation of the key since key cant be tuple
                 demand_data[key] = int(abs(demand[week]))
@@ -90,7 +92,8 @@ class ScmEnv(gymnasium.Env):
         self.obs_ub_num_products = np.array([len(self.T)*self.Dmax_p200527730*(1 + value) + self.inv_max for i, value in enumerate(self.S.values())], dtype=np.int32)
         self.obs_ub_Demand = np.array([self.Dmax_p200527730 for i, value in enumerate(self.S.values())], dtype=np.int32)
         self.obs_ub_shipping = np.array([1], dtype=np.int32)
-        UB=np.hstack((self.obs_ub_num_products, self.obs_ub_Demand, self.obs_ub_shipping))
+        self.obs_ub_ramping = np.array([len(self.P)], dtype=np.int32)
+        UB=np.hstack((self.obs_ub_num_products, self.obs_ub_Demand, self.obs_ub_shipping, self.obs_ub_ramping))
         observation_space = spaces.Box(low=0, high=UB, dtype=np.int32)
         return observation_space
     
@@ -123,8 +126,9 @@ class ScmEnv(gymnasium.Env):
         demand_products = np.array(demand_products, dtype=np.int32)
         
         shipping = np.array([0])
+        ramping = np.array([0])
 
-        self.current_obs = np.hstack((current_products, demand_products, shipping))
+        self.current_obs = np.hstack((current_products, demand_products, shipping, ramping))
         return self.current_obs, {}
 
 
@@ -162,8 +166,9 @@ class ScmEnv(gymnasium.Env):
         demand_products = np.array(demand_products, dtype=np.int32)
         
         shipping = np.array([0])
+        ramping = np.array([0])
         
-        self.current_obs = np.hstack((self.current_products, demand_products, shipping)) # Observation is number of products left after considering demand followed by the demands for products for this week.
+        self.current_obs = np.hstack((self.current_products, demand_products, shipping, ramping)) # Observation is number of products left after considering demand followed by the demands for products for this week.
         
         return self.current_obs, {}
 
@@ -177,7 +182,7 @@ class ScmEnv(gymnasium.Env):
         action = np.floor(action)
         
         #method parameters
-        next_obs = np.zeros(len(self.P)*(2) + 0 + 1, dtype=np.int32)
+        next_obs = np.zeros(len(self.P)*(2) + 1 + 1, dtype=np.int32)
         added_demand_units = np.zeros(len(self.P), dtype=np.int32)
         unmet_demand_units = np.zeros(len(self.P), dtype=np.int32)
 
@@ -191,6 +196,7 @@ class ScmEnv(gymnasium.Env):
 
 
         shipping = 0
+        ramping = 0
 
 
         # Compute next observation
@@ -242,11 +248,19 @@ class ScmEnv(gymnasium.Env):
         for index, element in enumerate(self.V.values()):
             sum_values += action[index] * element
         if sum_values > self.Vmax * self.N:
-            reward += -1000000
+            episode_truncated = False
+            reward += -10
             shipping = 1
         else:
+            episode_truncated = False
             reward += 0
 
+        #ramping
+        if self.week_num != 0:
+            for curr, nxt, r in zip(self.current_obs[:len(self.P)], next_obs[:len(self.P)], self.R.values()):
+                if abs(curr - nxt) >= r:
+                    reward -= 10
+                    ramping += 1
 
         # update current_obs.
         index=0
@@ -255,7 +269,8 @@ class ScmEnv(gymnasium.Env):
             index +=1 
 
 
-        next_obs[-1] = shipping
+        next_obs[-2] = shipping
+        next_obs[-1] = ramping
         self.current_obs = next_obs
         
         #update previous action
@@ -265,7 +280,7 @@ class ScmEnv(gymnasium.Env):
         # Compute episode done and truncated conditions.
         self.week_num += 1
         episode_done = False
-        episode_truncated = False
+        #episode_truncated = False
         if self.week_num >= len(self.T):
             episode_done = True
             self.week_num = 0
@@ -273,7 +288,7 @@ class ScmEnv(gymnasium.Env):
 
         #reward must be float.
         # info must be dictionary.
-        return self.current_obs, reward, episode_done, episode_truncated, {'milp_reward':milp_reward, 'shipping_violated':shipping, 'inventory':self.current_obs, 'unmet': unmet_demand_units} #'ramping_violated':ramping}
+        return self.current_obs, reward, episode_done, episode_truncated, {'milp_reward':milp_reward, 'shipping_violated':shipping, 'ramping_violated':ramping, 'inventory':self.current_obs, 'unmet': unmet_demand_units} #'ramping_violated':ramping}
 
 
     

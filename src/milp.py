@@ -73,7 +73,7 @@ class Data(typing.NamedTuple):
         1. Create rest of the model parameters.
             - N, A, B, C
         """
-        num_containers = 50
+        num_containers = 5
         large_constant_1 = 10000
         large_constant_2 = 10000
 
@@ -243,7 +243,7 @@ class OptimizationModel:
             """
 
         #Ramping constraint
-        """
+        
         for p in self.P:
             for t in self.T:
                 if t > 0:
@@ -255,7 +255,7 @@ class OptimizationModel:
                         -self.R[f"{p}"] <= self.x[(p, t)] - self.x[(p, t - 1)],
                         ctname=f"ramping_constraint2_{p}_{t}"
                     )
-        """
+        
 
         #Proportionality constraints
         """
@@ -285,6 +285,8 @@ class OptimizationModel:
                         )
         """
 
+        #Max items restriction constraints
+        
 
         #Variable restrictions
 
@@ -322,9 +324,10 @@ class OptimizationModel:
 
     def optimize(self):
         start_time = time.time()  # Capture the start time
+        self.solve_time = 0
 
         self.model.export_as_lp("optimization_model.lp")
-        self.model.solve()
+        self.model.solve(log_output=True)
 
         end_time = time.time()  # Capture the end time
         self.solve_time = end_time - start_time  # Calculate the solve time
@@ -332,9 +335,11 @@ class OptimizationModel:
         if self.model.solution.is_valid_solution:
             logging.debug(f"Notify end solve, status=JobSolveStatus.OPTIMAL_SOLUTION, solve_time={self.solve_time}")
             logging.info(f"Notify end solve, status=JobSolveStatus.OPTIMAL_SOLUTION, solve_time={self.solve_time}")
-        else:
+        else:            
             log.warning('Optimization did not result in an optimal solution.')
         
+        
+        """
         totalSS = 0
         totalDemand = 0
         totalinv = 0
@@ -359,6 +364,7 @@ class OptimizationModel:
                 unmet += self.model.solution.get_value(self.e[(p,t)])
             print("Total unmet: " + str(totalinv))
             unmet = 0
+        """
         """
         for idx, c in enumerate(self.C):
             for p in c:

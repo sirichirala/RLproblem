@@ -34,11 +34,11 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'SAA'))
     instance_name: str = 'static_instance'
-    num_time_points: int = 53
+    num_time_points: int = 3
     location_id: int = 3000
     lead_time_in_weeks: int = 12 
     container_volume: float = 2350.0
-    items_file: str = 'item_master_200.csv'
+    items_file: str = 'item_master.csv'
     forecast_file: str = 'forecast.csv'
     open_positions_file: str = 'open_po.csv'
 
@@ -79,7 +79,7 @@ class StaticData(typing.NamedTuple):
         df.drop(df[(df.on_hand == 0) & (df.safety_stock == 0)].index, inplace = True)
 
         #keep only 5 products (toy problem!!!!!!!)
-        #df = df.tail(5)
+        df = df.tail(5)
         
         # create products 
         products = [Product(id = i, volume = v, safety_stock_in_weeks = s) 
@@ -110,8 +110,9 @@ class StaticData(typing.NamedTuple):
             mle_params[id] = {"alpha": alpha, "loc": loc, "scale": scale}
             # generating data is as simple as 
             # data = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=100)
-            demand = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=cfg.num_time_points)
-            demand = np.ceil(demand).astype(int)
+            demand = [random.randint(5,15) for _ in range(cfg.num_time_points)]
+            #demand = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=cfg.num_time_points)
+            #demand = np.ceil(demand).astype(int)
             for week in range(cfg.num_time_points):
                 key = f"{id}_{week}"  # Create a string representation of the key since key cant be tuple
                 demand_data[key] = abs(int(demand[week]))
@@ -119,6 +120,7 @@ class StaticData(typing.NamedTuple):
         """
         1. Ramping factor for each product.
         ramping_factor = {f"{id}" : random.randint(5, 15) for id in product_ids}
+        """
         """
         #200 products ramping factor
         ramping_factor = {
@@ -324,7 +326,7 @@ class StaticData(typing.NamedTuple):
         "20052773200": 2
         }
         
-
+        """
         """
         #50 products ramping factor
         ramping_factor = {
@@ -381,7 +383,7 @@ class StaticData(typing.NamedTuple):
         }
         """
         
-        """
+        
         #5 products toy problem
         ramping_factor = {
         "20052773002": 1,
@@ -389,7 +391,7 @@ class StaticData(typing.NamedTuple):
         "20052773006": 2,
         "20052773007": 1,
         "20052773008": 1}
-        """
+        
 
         """
         Cost Construction:
@@ -407,6 +409,7 @@ class StaticData(typing.NamedTuple):
         #H = {f"{id}" : F[f"{id}"]/2 for id in product_ids}
         #G = {f"{id}" : F[f"{id}"]/3 for id in product_ids}
         
+        """
         #200 products
         F = {
         "20052773001": 39.941893645681944,
@@ -1014,7 +1017,7 @@ class StaticData(typing.NamedTuple):
         "20052773199": 13.786655701685902,
         "20052773200": 13.861220097859638
         }
-
+        """
         """
         #50 porducts
         F = {
@@ -1175,7 +1178,7 @@ class StaticData(typing.NamedTuple):
         }
         """
 
-        """
+        
         #5 products toy problem
         
         F={
@@ -1199,7 +1202,7 @@ class StaticData(typing.NamedTuple):
         "20052773007": 10.029018057074095,
         "20052773008": 11.822096865886756
         }
-        """
+        
 
         alpha = 25
 

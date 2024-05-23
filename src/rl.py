@@ -76,7 +76,7 @@ class Data(typing.NamedTuple):
         1. Create rest of the model parameters.
             - N, A, B
         """
-        num_containers = 50
+        num_containers = 5
         large_constant_1 = 10000
         large_constant_2 = 10000
 

@@ -34,11 +34,11 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
     instance_name: str = 'static_instance'
-    num_time_points: int = 53
+    num_time_points: int = 3
     location_id: int = 3000
     lead_time_in_weeks: int = 12 
     container_volume: float = 2350.0
-    items_file: str = 'item_master_200.csv'
+    items_file: str = 'item_master_50.csv'
     forecast_file: str = 'forecast.csv'
     open_positions_file: str = 'open_po.csv'
 
@@ -80,6 +80,7 @@ class StaticData(typing.NamedTuple):
 
         #keep only 5 products (toy problem!!!!!!!)
         #df = df.tail(5)
+        df = df.head(15)
         
         # create products 
         products = [Product(id = i, volume = v, safety_stock_in_weeks = s) 
@@ -108,10 +109,13 @@ class StaticData(typing.NamedTuple):
             observations = np.array(df_item['units'])
             alpha, loc, scale = stats.gamma.fit(observations)
             mle_params[id] = {"alpha": alpha, "loc": loc, "scale": scale}
+            """
             # generating data is as simple as 
             # data = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=100)
-            demand = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=cfg.num_time_points)
-            demand = np.ceil(demand).astype(int)
+            """
+            demand = [random.randint(5,15) for _ in range(cfg.num_time_points)]
+            #demand = stats.gamma.rvs(alpha, loc=loc, scale=scale, size=cfg.num_time_points)
+            #demand = np.ceil(demand).astype(int)
             for week in range(cfg.num_time_points):
                 key = f"{id}_{week}"  # Create a string representation of the key since key cant be tuple
                 demand_data[key] = abs(int(demand[week]))
@@ -121,6 +125,7 @@ class StaticData(typing.NamedTuple):
         ramping_factor = {f"{id}" : random.randint(5, 15) for id in product_ids}
         """
 
+        """
         #200 products ramping factor
         ramping_factor = {
         "20052773030": 2,
@@ -324,11 +329,10 @@ class StaticData(typing.NamedTuple):
         "20052773199": 1,
         "20052773200": 2
         }
-
         """
+        
         #50 products ramping factor
         ramping_factor = {
-        "20052773030": 2,
         "20052773001": 2,
         "20052773002": 1,
         "20052773003": 1,
@@ -343,7 +347,9 @@ class StaticData(typing.NamedTuple):
         "20052773012": 1,
         "20052773013": 2,
         "20052773014": 2,
-        "20052773015": 2,
+        "20052773015": 2
+        }
+        """
         "20052773016": 1,
         "20052773017": 1,
         "20052773018": 1,
@@ -354,30 +360,31 @@ class StaticData(typing.NamedTuple):
         "20052773023": 2,
         "20052773024": 2,
         "20052773025": 1,
-        "20052773038": 4,
-        "20052773039": 5,
-        "20052773040": 2,
-        "20052773041": 5,
         "20052773026": 2,
         "20052773027": 1,
-        "20052773042": 3,
-        "20052773043": 4,
-        "20052773044": 6,
-        "20052773045": 5,
         "20052773028": 2,
-        "20052773046": 4,
-        "20052773047": 7,
-        "20052773048": 3,
-        "20052773049": 4,
-        "20052773050": 4,
+        "20052773029": 1,
+        "20052773030": 2,
+        "20052773031": 1,
+        "20052773032": 2,
         "20052773033": 2,
         "20052773034": 1,
         "20052773035": 2,
         "20052773036": 1,
         "20052773037": 2,
-        "20052773031": 1,
-        "20052773032": 2,
-        "20052773029": 1
+        "20052773038": 4,
+        "20052773039": 5,
+        "20052773040": 2,
+        "20052773041": 5,
+        "20052773042": 3,
+        "20052773043": 4,
+        "20052773044": 6,
+        "20052773045": 5,
+        "20052773046": 4,
+        "20052773047": 7,
+        "20052773048": 3,
+        "20052773049": 4,
+        "20052773050": 4
         }
         """
 
@@ -407,6 +414,7 @@ class StaticData(typing.NamedTuple):
         #H = {f"{id}" : random.uniform(15, 20) for id in product_ids}
         #G = {f"{id}" : random.uniform(10, 14) for id in product_ids}
         
+        """
         #200 products
         F = {
         "20052773001": 39.941893645681944,
@@ -1014,8 +1022,8 @@ class StaticData(typing.NamedTuple):
         "20052773199": 13.786655701685902,
         "20052773200": 13.861220097859638
         }
-
         """
+        
         #50 products
         F = {
         "20052773001": 39.941893645681944,
@@ -1032,7 +1040,9 @@ class StaticData(typing.NamedTuple):
         "20052773012": 39.28131343323098,
         "20052773013": 37.390625382372406,
         "20052773014": 33.96974390290346,
-        "20052773015": 30.475698378672593,
+        "20052773015": 30.475698378672593
+        }
+        """
         "20052773016": 35.28321763738729,
         "20052773017": 32.200197017293114,
         "20052773018": 35.62418087896188,
@@ -1069,6 +1079,7 @@ class StaticData(typing.NamedTuple):
         "20052773049": 39.831010014190056,
         "20052773050": 36.36427265171041
         }
+        """
         H = {
         "20052773001": 19.970946822840972,
         "20052773002": 17.81209043948094,
@@ -1084,7 +1095,9 @@ class StaticData(typing.NamedTuple):
         "20052773012": 15.28131343323098,
         "20052773013": 15.390625382372406,
         "20052773014": 18.96974390290346,
-        "20052773015": 17.475698378672593,
+        "20052773015": 17.475698378672593
+        }
+        """
         "20052773016": 19.28321763738729,
         "20052773017": 15.200197017293114,
         "20052773018": 16.62418087896188,
@@ -1121,6 +1134,7 @@ class StaticData(typing.NamedTuple):
         "20052773049": 19.915505007095028,
         "20052773050": 18.182136325855204
         }
+        """
         G = {
         "20052773001": 13.313964548560648,
         "20052773002": 11.87472695965396,
@@ -1136,7 +1150,9 @@ class StaticData(typing.NamedTuple):
         "20052773012": 12.28131343323098,
         "20052773013": 10.390625382372406,
         "20052773014": 11.96974390290346,
-        "20052773015": 13.475698378672593,
+        "20052773015": 13.475698378672593
+        }
+        """
         "20052773016": 13.28321763738729,
         "20052773017": 12.200197017293114,
         "20052773018": 13.62418087896188,

@@ -28,7 +28,7 @@ class Config(typing.NamedTuple):
     instance_path: str = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', 'data'))
     instance_name: str = 'ic_instance'
-    items_file: str = 'item_master_200.csv'
+    items_file: str = 'item_master_50.csv'
     forecast_file: str = 'forecast.csv'
     open_positions_file: str = 'open_po.csv'
 
@@ -64,6 +64,7 @@ class IcData(typing.NamedTuple):
         
         #keep only 5 products (toy problem!!!!!!!)
         #df = df.tail(5)
+        df = df.head(15)
         
 
         # create products 
